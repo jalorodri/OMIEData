@@ -54,7 +54,7 @@ class MarginalPriceFileReader(OMIEFileReader):
 
         # from first line we get the units and the price date. We just look at the date
         lines = response.text.split("\n")
-        matches = re.findall('\d\d/\d\d/\d\d\d\d', lines.pop(0))
+        matches = re.findall(r'\d\d/\d\d/\d\d\d\d', lines.pop(0))
         if not (len(matches) == 2):
             print('Response ' + response.url + ' does not have the expected format.')
         else:
@@ -89,7 +89,7 @@ class MarginalPriceFileReader(OMIEFileReader):
 
         # from first line we get the units and the price date. We just look at the date
         line = file.readline()
-        matches = re.findall('\d\d/\d\d/\d\d\d\d', line)
+        matches = re.findall(r'\d\d/\d\d/\d\d\d\d', line)
         if not (len(matches) == 2):
             print('File ' + filename + ' does not have the expected format.')
         else:
