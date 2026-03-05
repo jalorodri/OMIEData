@@ -16,46 +16,42 @@ class AdjustmentPriceFileReader(OMIEFileReader):
         ]
     }
 
-    __key_list_retrieve__ = [
-        "DATE",
-        "CONCEPT",
-        "H1",
-        "H2",
-        "H3",
-        "H4",
-        "H5",
-        "H6",
-        "H7",
-        "H8",
-        "H9",
-        "H10",
-        "H11",
-        "H12",
-        "H13",
-        "H14",
-        "H15",
-        "H16",
-        "H17",
-        "H18",
-        "H19",
-        "H20",
-        "H21",
-        "H22",
-        "H23",
-        "H24",
-        "H25",
-    ]
-
     __dateFormatInFile__ = "%d/%m/%Y"
     __localeInFile__ = "en_DK.UTF-8"
 
+    # List of periods of data per hour. If file format changes, the day of change should be listed at
+    # the TOP of the list in order to iterate backwards in time to be able to find the correct number.
+    __periods_per_hour__ = (
+        (dt.date(2025, 10,  1),  4),    # Updated in October 2025 to quarterly data
+        (dt.date(1998,  1,  1),  1)     # Data is published since January 1, 1998 in hourly intervals
+    )
+
     def __init__(self, types=None):
-        self.conceptsToLoad = (
-            [v for v in DataTypeInMarginalPriceFile] if not types else types
-        )
+        self.conceptsToLoad = [v for v in DataTypeInMarginalPriceFile] if not types else types
+
+        match(frequency):
+            case "hour": 
+                self.__hourly_periods_output__ = 1
+            case "quarter_hour": 
+                self.__hourly_periods_output__ = 4
+            case "minute":
+                self.__hourly_periods_output__ = 60
+            case _:
+                raise ValueError("Unsupported number of datapoints per hour")
+        
+        self.__key_list_retrieve__ = ['DATE', 'CONCEPT']
+        for i in range(1, 26):
+            for j in range (1, self.__hourly_periods_output__ + 1):
+                self.__key_list_retrieve__.append('H' + str(i).zfill(2) + '_' + str(j).zfill(2))
 
     def get_keys(self):
-        return AdjustmentPriceFileReader.__key_list_retrieve__
+        return self.__key_list_retrieve__
+
+    def get_hourly_periods_input(self, date: datetime) -> int:
+        i = 0
+        while self.__periods_per_hour__[i][0] > date:
+            i += 1
+        return self.__periods_per_hour__[i][1]
 
     def get_data_from_response(self, response: Response) -> pd.DataFrame:
         res = pd.DataFrame(columns=self.get_keys())
@@ -64,13 +60,11 @@ class AdjustmentPriceFileReader(OMIEFileReader):
         lines = response.text.split("\n")
         matches = re.findall("\d\d/\d\d/\d\d\d\d", lines.pop(0))  # noqa: W605
         if not (len(matches) == 2):
-            pass
+            print('Response ' + response.url + ' does not have the expected format.')
         else:
             # The second date is the one we want
-            date = dt.datetime.strptime(
-                matches[1], AdjustmentPriceFileReader.__dateFormatInFile__
-            ).date()
-
+            date = dt.datetime.strptime(matches[1], AdjustmentPriceFileReader.__dateFormatInFile__).date()
+            periods_per_hour_input = self.get_hourly_periods_input(date)
             # Process all the lines
 
             while lines:
@@ -92,12 +86,11 @@ class AdjustmentPriceFileReader(OMIEFileReader):
                             first_col
                         ][1]
 
-                        dico = self._process_line(
-                            date=date,
-                            concept=concept_type,
-                            values=splits[1:],
-                            multiplier=units,
-                        )
+                        dico = self._process_line(date=date, 
+                                                  concept=concept_type, 
+                                                  values=splits[1:], 
+                                                  multiplier=units,
+                                                  periods_per_hour_input=periods_per_hour_input)
                         res = pd.concat([res, pd.DataFrame([dico])], ignore_index=True)
 
             return res
@@ -138,45 +131,56 @@ class AdjustmentPriceFileReader(OMIEFileReader):
                             first_col
                         ][1]
 
-                        dico = self._process_line(
-                            date=date,
-                            concept=concept_type,
-                            values=splits[1:],
-                            multiplier=units,
-                        )
+                        dico = self._process_line(date=date, 
+                                                  concept=concept_type, 
+                                                  values=splits[1:], 
+                                                  multiplier=units,
+                                                  periods_per_hour_input=periods_per_hour_input)
                         res = pd.concat([res, pd.DataFrame([dico])], ignore_index=True)
 
             return res
 
-    def _process_line(
-        self,
-        date: dt.date,
-        concept: DataTypeInMarginalPriceFile,
-        values: list,
-        multiplier=1.0,
-    ) -> dict:
-        key_list = AdjustmentPriceFileReader.__key_list_retrieve__
+    def _process_line(self, date: dt.date, concept: DataTypeInMarginalPriceFile, values: list, multiplier=1.0, periods_per_hour_input=4) -> dict:
+        
+        key_list = self.__key_list_retrieve__
 
         result = dict.fromkeys(self.get_keys())
         result[key_list[0]] = date
         result[key_list[1]] = str(concept)
 
-        for i, v in enumerate(values, start=1):
-            if i > 25:
-                break  # Jump if 25-hour day or spaces ..
-            try:
-                f = multiplier * float(parse_decimal(v, locale=self.__localeInFile__))
-            except:
-                if i == 24:
-                    # Day with 23-hours.
-                    result[key_list[25]] = np.nan
-                    result[key_list[26]] = np.nan
-                elif i == 25:
-                    # Day with 25-hours.
-                    result[key_list[26]] = np.nan
-                else:
-                    raise
-            else:
-                result[key_list[i + 1]] = f
+        values_processed = self._process_list_step(
+                                    old_list=values[:], 
+                                    new_length=(len(values)-1) * self.__hourly_periods_output__ // periods_per_hour_input
+                                    )
 
+        nan_list = [np.nan] * (25 * self.__hourly_periods_output__ - len(values_processed))
+        values_processed.extend(nan_list)
+
+        for i, v in enumerate(values_processed, start=1):
+            if i > 25 * self.__hourly_periods_output__:
+                break # Jump if 25-hour day or spaces ..
+            
+            f = multiplier * v
+            result[key_list[i + 1]] = f
+            
         return result
+
+    def _process_list_step(self, old_list: list, new_length: int) -> list:
+        old_length = len(old_list) - 1
+        new_list = []
+
+        intermediate_list = [float(parse_decimal(v, locale=self.__localeInFile__)) for v in old_list[:old_length]]
+        
+        if old_length == new_length:
+            for i in range(0, new_length):
+                new_list.append(intermediate_list[i])
+        
+        elif old_length < new_length:
+            for i in range(0, new_length):
+                new_list.append(intermediate_list[(i * old_length) // new_length])
+        
+        elif old_length > new_length:
+            intermediate_array = np.reshape(intermediate_list[:old_length], (-1, old_length // new_length))
+            new_list = intermediate_array.mean(axis=1).tolist()
+        
+        return new_list
