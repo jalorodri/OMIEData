@@ -34,11 +34,6 @@ class MarginalPriceFileReader(OMIEFileReader):
         'Energía total con bilaterales del mercado Ibérico (MWh)':
             [DataTypeInMarginalPriceFile.ENERGY_IBERIAN_WITH_BILLATERAL, 1.0]}
 
-    __key_list_retrieve__ = ['DATE', 'CONCEPT',
-                             'H1', 'H2', 'H3', 'H4','H5', 'H6','H7', 'H8','H9','H10',
-                             'H11', 'H12','H13', 'H14','H15', 'H16','H17', 'H18','H19','H20',
-                             'H21', 'H22','H23', 'H24', "H25"]
-
     __dateFormatInFile__ = '%d/%m/%Y'
     __localeInFile__ = "en_DK.UTF-8"
 
