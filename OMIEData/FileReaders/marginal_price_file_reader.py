@@ -145,7 +145,7 @@ class MarginalPriceFileReader(OMIEFileReader):
 
             return res
 
-    def _process_line(self, date: dt.date, concept: DataTypeInMarginalPriceFile, values: list, multiplier=1.0) -> dict:
+    def _process_line(self, date: dt.date, concept: DataTypeInMarginalPriceFile, values: list, multiplier=1.0, periods_per_hour_input=4) -> dict:
 
         key_list = self.__key_list_retrieve__
 
