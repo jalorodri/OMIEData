@@ -42,11 +42,39 @@ class MarginalPriceFileReader(OMIEFileReader):
     __dateFormatInFile__ = '%d/%m/%Y'
     __localeInFile__ = "en_DK.UTF-8"
 
-    def __init__(self, types=None):
+    # List of periods of data per hour. If file format changes, the day of change should be listed at
+    # the TOP of the list in order to iterate backwards in time to be able to find the correct number.
+    __periods_per_hour__ = (
+        (dt.date(2025, 10,  1),  4),    # Updated in October 2025 to quarterly data
+        (dt.date(1998,  1,  1),  1)     # Data is published since January 1, 1998 in hourly intervals
+    )
+
+    def __init__(self, frequency: string, types=None):
         self.conceptsToLoad = [v for v in DataTypeInMarginalPriceFile] if not types else types
+        
+        match(frequency):
+            case "hour": 
+                self.__hourly_periods_output__ = 1
+            case "quarter_hour": 
+                self.__hourly_periods_output__ = 4
+            case "minute":
+                self.__hourly_periods_output__ = 60
+            case _:
+                raise ValueError("Unsupported number of datapoints per hour")
+        
+        self.__key_list_retrieve__ = ['DATE', 'CONCEPT']
+        for i in range(1, 26):
+            for j in range (1, self.__hourly_periods_output__ + 1):
+                self.__key_list_retrieve__.append('H' + str(i).zfill(2) + '_' + str(j).zfill(2))
 
     def get_keys(self):
         return MarginalPriceFileReader.__key_list_retrieve__
+    
+    def get_hourly_periods_input(self, date: datetime) -> int:
+        i = 0
+        while self.__periods_per_hour__[i][0] > date:
+            i += 1
+        return self.__periods_per_hour__[i][1]
 
     def get_data_from_response(self, response: Response) -> pd.DataFrame:
 
@@ -60,7 +88,7 @@ class MarginalPriceFileReader(OMIEFileReader):
         else:
             # The second date is the one we want
             date = dt.datetime.strptime(matches[1], MarginalPriceFileReader.__dateFormatInFile__).date()
-
+            periods_per_hour_input = self.get_hourly_periods_input(date)
             # Process all the lines
 
             while lines:
@@ -76,7 +104,11 @@ class MarginalPriceFileReader(OMIEFileReader):
                     if concept_type in self.conceptsToLoad:
                         units = MarginalPriceFileReader.__dic_static_concepts__[first_col][1]
 
-                        dico = self._process_line(date=date, concept=concept_type, values=splits[1:], multiplier=units)
+                        dico = self._process_line(date=date, 
+                                                  concept=concept_type, 
+                                                  values=splits[1:], 
+                                                  multiplier=units,
+                                                  periods_per_hour_input=periods_per_hour_input)
                         res = pd.concat([res, pd.DataFrame([dico])], ignore_index=True)
 
             return res
@@ -95,6 +127,7 @@ class MarginalPriceFileReader(OMIEFileReader):
         else:
             # The second date is the one we want
             date = dt.datetime.strptime(matches[1], MarginalPriceFileReader.__dateFormatInFile__).date()
+            periods_per_hour_input = self.get_hourly_periods_input(date)
 
             # Process all the lines
             while line:
@@ -108,7 +141,11 @@ class MarginalPriceFileReader(OMIEFileReader):
 
                     if concept_type in self.conceptsToLoad:
                         units = MarginalPriceFileReader.__dic_static_concepts__[first_col][1]
-                        dico = self._process_line(date=date, concept=concept_type, values=splits[1:], multiplier=units)
+                        dico = self._process_line(date=date, 
+                                                  concept=concept_type, 
+                                                  values=splits[1:], 
+                                                  multiplier=units,
+                                                  periods_per_hour_input=periods_per_hour_input)
                         res = pd.concat([res, pd.DataFrame([dico])], ignore_index=True)
 
             return res
@@ -121,24 +158,39 @@ class MarginalPriceFileReader(OMIEFileReader):
         result[key_list[0]] = date
         result[key_list[1]] = str(concept)
 
-        for i, v in enumerate(values, start=1):
+        values_processed = self._process_list_step(
+                                    old_list=values[:], 
+                                    new_length=(len(values)-1) * self.__hourly_periods_output__ // periods_per_hour_input
+                                    )
 
-            if i > 25:
+        nan_list = [np.nan] * (25 * self.__hourly_periods_output__ - len(values_processed))
+        values_processed.extend(nan_list)
+
+        for i, v in enumerate(values_processed, start=1):
+
+            if i > 25 * self.__hourly_periods_output__:
                 break # Jump if 25-hour day or spaces ..
-            try:
-                f = multiplier * float(parse_decimal(v, locale=self.__localeInFile__))
-            except:
-
-                if i == 24:
-                    # Day with 23-hours.
-                    result[key_list[25]] = np.nan
-                    result[key_list[26]] = np.nan
-                elif i == 25:
-                    # Day with 25-hours.
-                    result[key_list[26]] = np.nan
-                else:
-                    raise
-            else:
-                result[key_list[i + 1]] = f
+            
+            f = multiplier * v
+            result[key_list[i + 1]] = f
 
         return result
+    def _process_list_step(self, old_list: list, new_length: int) -> list:
+        old_length = len(old_list) - 1
+        new_list = []
+
+        intermediate_list = [float(parse_decimal(v, locale=self.__localeInFile__)) for v in old_list[:old_length]]
+        
+        if old_length == new_length:
+            for i in range(0, new_length):
+                new_list.append(intermediate_list[i])
+        
+        elif old_length < new_length:
+            for i in range(0, new_length):
+                new_list.append(intermediate_list[(i * old_length) // new_length])
+        
+        elif old_length > new_length:
+            intermediate_array = np.reshape(intermediate_list[:old_length], (-1, old_length // new_length))
+            new_list = intermediate_array.mean(axis=1).tolist()
+        
+        return new_list
