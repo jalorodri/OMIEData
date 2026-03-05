@@ -63,7 +63,7 @@ class MarginalPriceFileReader(OMIEFileReader):
                 self.__key_list_retrieve__.append('H' + str(i).zfill(2) + '_' + str(j).zfill(2))
 
     def get_keys(self):
-        return MarginalPriceFileReader.__key_list_retrieve__
+        return self.__key_list_retrieve__
     
     def get_hourly_periods_input(self, date: datetime) -> int:
         i = 0
@@ -93,7 +93,7 @@ class MarginalPriceFileReader(OMIEFileReader):
                 splits = line.split(sep=';')
                 first_col = splits[0]
 
-                if first_col in MarginalPriceFileReader.__dic_static_concepts__.keys():
+                if first_col in .__dic_static_concepts__.keys():
                     concept_type = MarginalPriceFileReader.__dic_static_concepts__[first_col][0]
 
                     if concept_type in self.conceptsToLoad:
@@ -147,7 +147,7 @@ class MarginalPriceFileReader(OMIEFileReader):
 
     def _process_line(self, date: dt.date, concept: DataTypeInMarginalPriceFile, values: list, multiplier=1.0) -> dict:
 
-        key_list = MarginalPriceFileReader.__key_list_retrieve__
+        key_list = self.__key_list_retrieve__
 
         result = dict.fromkeys(self.get_keys())
         result[key_list[0]] = date
