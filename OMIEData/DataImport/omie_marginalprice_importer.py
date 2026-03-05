@@ -7,9 +7,9 @@ from OMIEData.FileReaders.marginal_price_file_reader import MarginalPriceFileRea
 
 class OMIEMarginalPriceFileImporter(OMIEDataImporterFromResponses):
 
-    def __init__(self, date_ini: dt.date, date_end: dt.date):
+    def __init__(self, date_ini: dt.date, date_end: dt.date, frequency: string):
 
         super().__init__(date_ini=date_ini,
                          date_end=date_end,
                          file_downloader=MarginalPriceDownloader(),
-                         file_reader=MarginalPriceFileReader())
+                         file_reader=MarginalPriceFileReader(frequency=frequency))
