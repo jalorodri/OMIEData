@@ -13,5 +13,5 @@ class OMIEAdjustmentPriceFileImporter(OMIEDataImporterFromResponses):
             date_ini=date_ini,
             date_end=date_end,
             file_downloader=AdjustmentPriceDownloader(),
-            file_reader=AdjustmentPriceFileReader(),
+            file_reader=AdjustmentPriceFileReader(frequency=frequency),
         )
