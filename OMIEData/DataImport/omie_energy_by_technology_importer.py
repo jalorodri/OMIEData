@@ -8,9 +8,9 @@ from OMIEData.Enums.all_enums import SystemType
 
 class OMIEEnergyByTechnologyImporter(OMIEDataImporterFromResponses):
 
-    def __init__(self, date_ini: dt.date, date_end: dt.date, system_type: SystemType):
+    def __init__(self, date_ini: dt.date, date_end: dt.date, system_type: SystemType, frequency: string):
 
         super().__init__(date_ini=date_ini,
                          date_end=date_end,
                          file_downloader=EnergyByTechnologyDownloader(system=system_type),
-                         file_reader=EnergyByTechnologyHourlyFileReader())
+                         file_reader=EnergyByTechnologyHourlyFileReader(frequency=frequency))
