@@ -15,7 +15,7 @@ class EnergyByTechnologyHourlyFileReader(OMIEFileReader):
         (dt.date(1998,  1,  1),  1)     # Data is published since January 1, 1998 in hourly intervals
     )
     
-    def __init__(self, types=None):
+    def __init__(self, frequency: string, types=None):
 
         self.conceptsToLoad = [v for v in TechnologyType] if not types else types
 
