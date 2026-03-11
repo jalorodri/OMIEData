@@ -93,7 +93,7 @@ class MarginalPriceFileReader(OMIEFileReader):
                 splits = line.split(sep=';')
                 first_col = splits[0]
 
-                if first_col in .__dic_static_concepts__.keys():
+                if first_col in self.__dic_static_concepts__.keys():
                     concept_type = MarginalPriceFileReader.__dic_static_concepts__[first_col][0]
 
                     if concept_type in self.conceptsToLoad:
